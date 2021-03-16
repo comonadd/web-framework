@@ -1,0 +1,24 @@
+{
+  "name": "web-framework",
+  "version": "1.0.0",
+  "description": "Web Framework",
+  "main": "dist/index.js",
+  "dependencies": {
+    "clean-webpack-plugin": "^3.0.0",
+    "html-webpack-plugin": "^4.5.1",
+    "ts-loader": "^8.0.14",
+    "typescript": "^4.1.3",
+    "webpack": "^5.17.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "webpack-cli": "^4.4.0",
+    "webpack-dev-server": "^3.11.2"
+  },
+  "scripts": {
+    "start": "cross-env DEV_MODE=1 webpack serve",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8"/>
+  </head>
+  <body>
+    <div id="app-root">
+      <h1>Todo List</h1>
+      <div class="todo-list" w-for="todo:todos">
+        <div class="todo-item">
+          <div w-content="todo.name"></div>
+        </div>
+      </div>
+      <input w-data="todoCurrent" />
+      <button w-on-click="addTodo">Fire!</button>
+    </div>
+  </body>
+</html>
