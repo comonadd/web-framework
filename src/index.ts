@@ -1,3 +1,5 @@
+import { DefaultMap } from "./util";
+
 type AppState = Record<string, any>;
 type Action = any;
 type Reducer = (appState: AppState, action: Action) => AppState;
@@ -28,68 +30,105 @@ interface State {
   rootContext: Context;
 }
 
+const contextProxy = {
+  get: function (target: any, prop: any, receiver: any) {
+    console.log(`setting a value to ${target} ${prop} ${receiver}`);
+    return "world";
+  },
+
+  set: function (target: any, prop: any, value: any) {
+    console.log(`setting a value to ${target} ${prop} ${value}`);
+    target[prop] = value;
+    // notify all listeners about the change
+    const listeners = target._listeners[prop];
+    if (listeners !== undefined) {
+      for (let listener of listeners) {
+        listener(value);
+      }
+    }
+    return true;
+  },
+};
+
+const emptyContext = (): Context => ({
+  parent: null,
+  children: [],
+  state: new Proxy({}, contextProxy),
+});
+
+const appStateProxy = {
+  get: function (target: any, prop: any, receiver: any) {
+    return "world";
+  },
+
+  set: function (target: any, prop: any, value: any) {
+    target[prop] = value;
+    // notify all listeners about the change
+    const listeners = target._listeners[prop];
+    if (listeners !== undefined) {
+      for (let listener of listeners) {
+        listener(value);
+      }
+    }
+    return true;
+  },
+};
+
 // The application state.
 const state: State = {
   handlers: {},
   listeners: {},
-  appState: {},
+  appState: new Proxy({}, appStateProxy),
   reducer: {},
   actionCreators: {},
   rootContext: null,
 };
 
-const objDiff = (a: Object, b: Object) => {
-  return {};
-};
+// const objDiff = (a: Object, b: Object) => {
+//   return {};
+// };
 
 // Dispatches an action and actually updates the state.
 // Calculates the difference between the current and the previous state
 // and emits "change" events for all affected bindings.
 // `context` - the context in which to search for bindings
-const dispatchAction = (
-  context: Context,
-  actionName: string,
-  action: Action
-) => {
-  const oldState = state.appState;
-  const newState = state.reducer[actionName](state.appState, action);
-  console.log(oldState, newState);
+// const dispatchAction = (context: Context, actionName: string, action: Action) => {
+//   const oldState = state.appState;
+//   const newState = state.reducer[actionName](state.appState, action);
+//   console.log(oldState, newState);
+//
+//   const diff = objDiff(oldState, newState);
+//
+//   const emitChangeEventsForTree = (tree: Record<string, any>, path: string) => {
+//     for (const [key, value] of Object.entries(tree)) {
+//       const oldValue = oldState[key];
+//       if (oldValue !== value) {
+//         // const b = findDataBinding(context, key);
+//         let b = null;
+//         if (b === null) {
+//           console.log(`Couldn't find a data binding for ${key}`);
+//           continue;
+//         } else {
+//           b.emitChange(value);
+//         }
+//       }
+//     }
+//   };
+//
+//   emitChangeEventsForTree(diff, null);
+//
+//   state.appState = newState;
+// };
 
-  const diff = objDiff(oldState, newState);
-
-  const emitChangeEventsForTree = (tree: Record<string, any>, path: string) => {
-    for (const [key, value] of Object.entries(tree)) {
-      const oldValue = oldState[key];
-      if (oldValue !== value) {
-        // const b = findDataBinding(context, key);
-
-        let b = null;
-
-        if (b === null) {
-          console.log(`Couldn't find a data binding for ${key}`);
-          continue;
-        }
-        b.emitChange(value);
-      }
-    }
-  };
-
-  emitChangeEventsForTree(diff, null);
-
-  state.appState = newState;
-};
-
-const appAction = (actionName: string, ...actionPayload: any[]) => {
-  const actionCreator = state.actionCreators[actionName];
-  if (!actionCreator) {
-    console.error(
-      `Action "${actionName}" isn't specified in the app configuration`
-    );
-    return;
-  }
-  const action = actionCreator(...actionPayload);
-  dispatchAction(state.rootContext, actionName, action);
-};
+// const appAction = (actionName: string, ...actionPayload: any[]) => {
+//   const actionCreator = state.actionCreators[actionName];
+//   if (!actionCreator) {
+//     console.error(`Action "${actionName}" isn't specified in the app configuration`);
+//     return;
+//   }
+//   const action = actionCreator(...actionPayload);
+//   dispatchAction(state.rootContext, actionName, action);
+// };
 
 const getAppState = () => {
   return state.appState;
@@ -106,11 +145,15 @@ const addListener = (listenFor: string, listener: Listener) => {
   }
 };
 
+type LocalState = any;
+
 // Context holds relevant information for a subtree
 interface Context {
-  bindings: Record<string, Binding>;
+  // bindings: Record<string, Binding>;
   parent: Context;
   children: Context[];
+  // Local state for a subtree
+  state: LocalState;
 }
 
 // Data Binding is a mechanism for connecting parts of the interface with the application state.
@@ -120,61 +163,91 @@ interface Context {
 //   `todo` is going to be available for binding in the current context. Everything
 //   as a child of `todo` will also be available, such as `todo.name`, which is going to
 //   be called when the todo name is changed.
-interface Binding {
-  value: any;
-  listeners: Listener[];
-  emitChange: (value: any) => void;
-}
+// interface Binding {
+//   value: any;
+//   listeners: Listener[];
+//   emitChange: (value: any) => void;
+// }
+//
+// const createBinding = (initialValue: any): Binding => ({
+//   value: initialValue,
+//   listeners: [],
+//   emitChange(newValue: any) {
+//     this.value = newValue;
+//     for (const l of this.listeners) {
+//       l(this.value);
+//     }
+//   },
+// });
 
-const createBinding = (initialValue: any): Binding => ({
-  value: initialValue,
-  listeners: [],
-  emitChange(newValue: any) {
-    this.value = newValue;
-    for (const l of this.listeners) {
-      l(this.value);
-    }
-  },
-});
-
-const findDataBinding = (ctx: Context, name: string): Binding | null => {
-  const binding = ctx.bindings[name];
-  if (binding) {
-    return binding;
-  } else if (ctx.parent !== null) {
-    return findDataBinding(ctx.parent, name);
-  } else {
-    return null;
-  }
-};
-
-const emptyContext = (): Context => ({
-  bindings: {},
-  parent: null,
-  children: [],
-});
-
-const findChildrenDataBindings = (
-  ctx: Context,
-  name: string,
-  skipFirst: boolean = true
-): Binding[] => {
-  let res: Binding[] = [];
-  if (!skipFirst) {
-    const binding = ctx.bindings[name];
-    if (binding) {
-      res.push(binding);
-    }
-  }
-  for (let children of ctx.children) {
-    for (const binding of findChildrenDataBindings(children, name, false)) {
-      res.push(binding);
-    }
-  }
-  return res;
-};
+// const findDataBinding = (ctx: Context, name: string): Binding | null => {
+//   const binding = ctx.bindings[name];
+//   if (binding) {
+//     return binding;
+//   } else if (ctx.parent !== null) {
+//     return findDataBinding(ctx.parent, name);
+//   } else {
+//     return null;
+//   }
+// };
 
 const wDataTags = ["input", "textarea"];
+
+const setValueInContext = (context: Context, propName: string, value: any) => {
+  if (context.state[propName] !== undefined) {
+    // found variable
+    context.state[propName] = value;
+  } else if (context.parent === null) {
+    // this is the root context, means that we haven't found any state variable to change,
+    // so this is an error
+    console.error(`Couldn't find state variable ${propName}`);
+  } else {
+    // try searching in the parent context
+    setValueInContext(context.parent, propName, value);
+  }
+};
+
+type StateChangeListener = (newValue: any) => void;
+
+const addListenerForSubtree = (
+  state: any,
+  propName: string,
+  onChange: StateChangeListener,
+): boolean => {
+  if (state.listeners === undefined) {
+    state.listeners = new DefaultMap(Array);
+  }
+  state.listeners[propName].push(onChange);
+  return true;
+};
+
+const addNewStateVariable = (context: Context, propName: string, initialValue: any) => {
+  context.state[propName] = initialValue;
+};
+
+const subscribeToContextStateChange = (
+  context: Context,
+  propName: string,
+  onChange: (newValue: any) => void,
+  callImmediately: boolean = false,
+): boolean => {
+  if (context.state[propName] !== undefined) {
+    // found variable
+    const added = addListenerForSubtree(context.state, propName, onChange);
+    if (callImmediately) {
+      onChange(context.state[propName]);
+    }
+    return added;
+  } else if (context.parent === null) {
+    // this is the root context, means that we haven't found any state variable to subscribe to,
+    // so this is an error
+    console.error(`Couldn't find state variable ${propName} to subscribe to`);
+    return false;
+  } else {
+    // try searching in the parent context
+    return subscribeToContextStateChange(context.parent, propName, onChange);
+  }
+};
 
 const considerNode = (state: State, node: any, dataBindingCtx: Context) => {
   // Process node attributes
@@ -199,8 +272,7 @@ const considerNode = (state: State, node: any, dataBindingCtx: Context) => {
           const lName = attr.value;
           node.addEventListener("input", (e: any) => {
             const value = (e.target as any).value;
-            const binding = findDataBinding(dataBindingCtx, lName);
-            binding.emitChange(value);
+            setValueInContext(dataBindingCtx, lName, value);
           });
           break;
         }
@@ -209,14 +281,7 @@ const considerNode = (state: State, node: any, dataBindingCtx: Context) => {
         // state changes, the content is changed.
         case "content": {
           const stateName = attr.value;
-          const binding = findDataBinding(dataBindingCtx, stateName);
-          console.log("trying to find", dataBindingCtx, stateName, binding);
-          if (binding === null) {
-            console.error(`w-content binding not found: ${stateName}`);
-            console.log(dataBindingCtx);
-            return;
-          }
-          binding.listeners.push((newValue) => {
+          subscribeToContextStateChange(dataBindingCtx, stateName, (newValue) => {
             node.innerText = newValue;
           });
           break;
@@ -237,44 +302,46 @@ const considerNode = (state: State, node: any, dataBindingCtx: Context) => {
             return;
           }
 
-          // Find the corresponding array binding
-          const listBinding = findDataBinding(dataBindingCtx, loopList);
-          console.log("listening for", listBinding);
-          if (listBinding === null) {
-            console.error(`w-for binding not found: ${loopList}`);
-            return;
-          }
-
           const forLoopContainerNode = node;
-          const forLoopChildren = Array.from(node.children).map((a: Node) =>
-            a.cloneNode(true)
-          );
+          const forLoopChildren = Array.from(node.children).map((a: Node) => a.cloneNode(true));
           forLoopContainerNode.innerHTML = null;
 
-          // Add iterable data binding to the current context so that
-          // it's accessible to the children
-          (dataBindingCtx as any)[loopIter] = createBinding(null);
-
-          console.log(dataBindingCtx);
-
-          // const loopIterBinding = createBinding();
-          const onListChange = (newValue: DataValue) => {
-            console.log("onlistchange", newValue);
-            if (!(newValue instanceof Array)) {
+          const onListUpdate = (newListValue: any) => {
+            // list changed, need to update all the items
+            console.log("onlistchange", newListValue);
+            if (!(newListValue instanceof Array)) {
               console.error("w-for only supports Array types");
               return;
             }
-            // when list is updated, replace the for container content
-            for (const item of newValue) {
+
+            // update items
+            forLoopContainerNode.innerHTML = null;
+            for (const item of newListValue) {
               for (const child of forLoopChildren) {
+                // create a new context for the children and
+                // add the iterable name as a variable
+                const ctx = emptyContext();
+                addNewStateVariable(dataBindingCtx, loopIter, item);
+
                 const newNode = child.cloneNode(true);
-                considerNode(state, newNode, dataBindingCtx);
+                considerNode(state, newNode, ctx);
                 forLoopContainerNode.appendChild(newNode);
               }
             }
           };
 
-          listBinding.listeners.push(onListChange);
+          // Subscribe to list state variable
+          const subscribed = subscribeToContextStateChange(
+            dataBindingCtx,
+            loopList,
+            onListUpdate,
+            true,
+          );
+          if (!subscribed) {
+            console.error(`w-for binding not found: ${loopList}`);
+            return;
+          }
+
           break;
         }
 
@@ -308,7 +375,7 @@ const considerNode = (state: State, node: any, dataBindingCtx: Context) => {
     considerNode(state, child as HTMLElement, {
       parent: dataBindingCtx,
       children: [],
-      bindings: {},
+      state: {},
     });
   }
 
@@ -354,7 +421,7 @@ document.addEventListener("DOMContentLoaded", () => {
     handlers: {
       addTodo: (e) => {
         const state = getAppState();
-        appAction("addTodo", state.todoCurrent);
+        // appAction("addTodo", state.todoCurrent);
       },
     },
   };
